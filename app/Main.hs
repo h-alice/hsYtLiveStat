@@ -20,12 +20,10 @@ import Text.HandsomeSoup
 import Control.Monad.IO.Class (MonadIO(liftIO))
 
 import qualified Data.Aeson as A
-import Data.Aeson.Types (parseMaybe, (.:), parse, Parser)
+import Data.Aeson.Types (parseMaybe, (.:), parse, Parser, parseField)
 import qualified Data.Text.Encoding as TE
 import Data.ByteString.Builder (toLazyByteString)
 import Data.Aeson (Value(Object))
-
-
 
 ytInfoPrefix :: T.Text
 ytInfoPrefix = "var ytInitialData = " :: T.Text
@@ -36,10 +34,31 @@ urlTest = "https://www.youtube.com/@soaringforyou" :: String
 youtubeUrlBase :: String
 youtubeUrlBase = "https://www.youtube.com" :: String
 
+locateAvatar :: A.Object -> Parser A.Object
+locateAvatar =      (.: "header")
+                >=> (.: "pageHeaderRenderer")
+                >=> (.: "content")
+                >=> (.: "pageHeaderViewModel")
+                >=> (.: "image")
+                >=> (.: "decoratedAvatarViewModel")
+
+getLiveStatus :: A.Object -> Parser T.Text
+getLiveStatus =     (.: "liveData")
+                >=> (.: "liveBadgeText")
+
+getLiveData :: A.Object -> Parser T.Text
+getLiveData =       (.: "rendererContext")
+                >=> (.: "commandContext")
+                >=> (.: "onTap")
+                >=> (.: "innertubeCommand")
+                >=> (.: "commandMetadata")
+                >=> (.: "webCommandMetadata")
+                >=> (.: "url")
+
+
 main :: IO ()
 main = do
     content <- get urlTest
-
 
     -- Doc from response body
     let doc = parseHtml $ TL.unpack $ TLE.decodeUtf8 $ content ^. responseBody
@@ -50,28 +69,10 @@ main = do
         (x:_) -> do
             case A.decodeStrictText $ T.dropEnd 1 $ T.drop (T.length ytInfoPrefix) x of
                 Nothing -> putStrLn "Failed to parse JSON"
-                Just parsedJson -> do
-                    let locateAvatar jsRoot =      jsRoot .: "header"
-                                            >>= \hd -> hd .: "pageHeaderRenderer"
-                                            >>= \rd -> rd .: "content"
-                                            >>= \ct -> ct .: "pageHeaderViewModel"
-                                            >>= \vm -> vm .: "image"
-                                            >>= \im -> im .: "decoratedAvatarViewModel" :: Parser A.Object
-                    -- Get live status from the avatar
-                    let getLiveStatus jsRoot =     jsRoot .: "liveData"
-                                            >>= \lv -> lv .: "liveBadgeText" :: Parser T.Text
+                Just parsedJson -> do                                  
 
-                    -- Get live data from the avatar
-                    let getLiveData jsRoot =       jsRoot .: "rendererContext"
-                                            >>= \rc -> rc .: "commandContext"
-                                            >>= \cc -> cc .: "onTap"
-                                            >>= \ot -> ot .: "innertubeCommand"
-                                            >>= \ic -> ic .: "commandMetadata"
-                                            >>= \cm -> cm .: "webCommandMetadata"
-                                            >>= \wm -> wm .: "url" :: Parser T.Text
-
-                    let x = parseMaybe (locateAvatar >=> getLiveData) parsedJson
-                    print x
+                    let ur = parseMaybe (locateAvatar >=> getLiveData) parsedJson
+                    print ur
 
 
 
