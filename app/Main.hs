@@ -27,9 +27,6 @@ import System.Environment (lookupEnv, getArgs) -- For reading configuration
 ytInfoPrefix :: T.Text
 ytInfoPrefix = "var ytInitialData = " :: T.Text
 
-urlTest :: String
-urlTest = "https://www.youtube.com/@RRGT" :: String
-
 youtubeUrlBase :: String
 youtubeUrlBase = "https://www.youtube.com" :: String
 
