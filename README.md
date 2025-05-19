@@ -42,4 +42,4 @@ If the channel is currently live, it will print the live streaming URL.
 
 ## License
 
-AGPL-3.0
+MIT
