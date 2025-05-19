@@ -1,27 +1,28 @@
+-- | A command-line tool to extract the live stream URL from a YouTube channel page.
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main (main) where
 
-import Network.Wreq
+import Control.Lens ((^.)) -- For accessing fields in data structures
+import Control.Monad (when, (>=>) ) -- For monadic operations
+import qualified Data.Aeson as A -- For parsing JSON
+import Data.Aeson.Types (Parser, parseMaybe, (.:)) -- For defining JSON parsers
+import Data.Functor ((<&>)) -- For applying functions to functors
+import Data.Text (Text) -- For working with Text
+
+
 import qualified Data.Text as T
-import Control.Monad (when, (>=>))
-import Control.Lens ((^.))
-import Data.Functor ((<&>))
-import qualified Data.Text.Lazy.Encoding as TLE
-import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy as TL -- For lazy Text
+import qualified Data.Text.Lazy.Encoding as TLE -- For encoding/decoding lazy Text
 
-import Text.XML.HXT.Core
-    ( ArrowXml(getText), (>>>), ArrowTree(deep), runX )
+import Network.Wreq (get, responseBody) -- For making HTTP requests
+import System.Environment (getArgs) -- For accessing command-line arguments
+import System.Exit (exitFailure) -- For exiting the program with an error code
+-- For printing error messages to stderr
+import Text.HandsomeSoup (css, parseHtml) -- For parsing HTML with CSS selectors
+import Text.XML.HXT.Core (ArrowTree (deep), ArrowXml (getText), (>>>), runX) -- For working with XML/HTML
+import System.IO (hPutStrLn, stderr)
 
-import Text.HandsomeSoup
-
-import qualified Data.Aeson as A
-import Data.Aeson.Types (parseMaybe, (.:), Parser)
-
--- OS related libraries
-import System.IO (hPutStrLn, stderr) -- For printing errors/warnings
-import System.Exit (exitFailure)      -- For exiting the program
-import System.Environment (lookupEnv, getArgs) -- For reading configuration
 
 
 ytInfoPrefix :: T.Text
@@ -38,11 +39,7 @@ locateAvatar =      (.: "header")
                 >=> (.: "image")
                 >=> (.: "decoratedAvatarViewModel")
 
-getLiveStatus :: A.Object -> Parser T.Text
-getLiveStatus =     (.: "liveData")
-                >=> (.: "liveBadgeText")
-
-getLiveData :: A.Object -> Parser T.Text
+getLiveData :: A.Object -> Parser Text
 getLiveData =       (.: "rendererContext")
                 >=> (.: "commandContext")
                 >=> (.: "onTap")
@@ -51,27 +48,14 @@ getLiveData =       (.: "rendererContext")
                 >=> (.: "webCommandMetadata")
                 >=> (.: "url")
 
-
-loadEnvRequired :: String       -- ^ Environment variable name
-                -> IO String    -- ^ Loaded value (program exits if not found)
-loadEnvRequired envVarName = do
-    maybeValue <- lookupEnv envVarName
-    case maybeValue of
-        Just val -> return val  -- Value found, return it
-        Nothing -> do
-            -- Value not found, print error to stderr and exit
-            hPutStrLn stderr $ "Unable to load required environment variable: '" ++ envVarName
-            exitFailure -- Terminate the program
-
-
 main :: IO ()
 main = do
 
     -- Check argument
     args <- getArgs
     when (length args /= 1) $ do
-        putStrLn "Usage: ytLiveStat <channel_name>"
-        putStrLn "Please provide the channel name as an argument. (with @)"
+        hPutStrLn stderr "Usage: ytLiveStat <channel_name>"
+        hPutStrLn stderr "Please provide the channel name as an argument. (with @)"
         exitFailure
 
     -- Get the channel content page
@@ -83,13 +67,14 @@ main = do
     yiInitContent <- runX (doc >>> css "script" >>> Text.XML.HXT.Core.deep getText) <&> filter (T.isPrefixOf ytInfoPrefix) . map T.pack
     case yiInitContent of
         [] -> do
-            putStrLn "Cannot extract ytInitialData from the page."
-            putStrLn "Either the page structure has changed or the channel does not exist."
+            hPutStrLn stderr "Cannot extract ytInitialData from the page."
+            hPutStrLn stderr "Either the page structure has changed or the channel does not exist."
             exitFailure
         (jsText:_) -> do
             case A.decodeStrictText $ T.dropEnd 1 $ T.drop (T.length ytInfoPrefix) jsText of
-                Nothing -> putStrLn "Failed to parse JSON"
+                Nothing -> do
+                    hPutStrLn stderr "Failed to parse JSON"
                 Just parsedJson -> do
                     case parseMaybe (locateAvatar >=> getLiveData) parsedJson of
-                        Nothing -> putStrLn "Failed to extract live data"
-                        Just liveData -> print $ youtubeUrlBase ++ T.unpack liveData
+                        Nothing -> hPutStrLn stderr "Failed to extract live data"
+                        Just liveData -> putStrLn $ youtubeUrlBase ++ T.unpack liveData
