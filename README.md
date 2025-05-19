@@ -27,8 +27,8 @@ That last step is optional, but highly encouraged.
 Clone the repository and build with Stack or Cabal:
 
 ```bash
-git clone https://github.com/yourusername/yt-live-stream-extractor
-cd yt-live-stream-extractor
+git clone https://github.com/h-alice/hsYtLiveStat
+cd hsYtLiveStat
 stack build
 ````
 
